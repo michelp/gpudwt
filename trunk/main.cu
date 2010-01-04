@@ -232,9 +232,9 @@ int main(int argc, char **argv)
         cudaCheckError("Memset device memory");
 
         /* Compute DWT */
-        nStage2dRDWT97(c_r_comp, c_r_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
-        nStage2dRDWT97(c_g_comp, c_g_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
-        nStage2dRDWT97(c_b_comp, c_b_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        nStage2dFDWT97(c_r_comp, c_r_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        nStage2dFDWT97(c_g_comp, c_g_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        nStage2dFDWT97(c_b_comp, c_b_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
         /* Store DWT to file */
         writeNStage2DDWT(c_r_comp, pixWidth, pixHeight, dwtLvls, srcFilename, ".r.dwt");
         writeNStage2DDWT(c_g_comp, pixWidth, pixHeight, dwtLvls, srcFilename, ".g.dwt");
@@ -271,7 +271,7 @@ int main(int argc, char **argv)
         cudaCheckError("Memset device memory");
 
         /* Compute DWT */
-        nStage2dRDWT97(c_component, c_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        nStage2dFDWT97(c_component, c_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
         /* Store DWT to file */
         writeNStage2DDWT(c_component, pixWidth, pixHeight, dwtLvls, srcFilename, ".dwt");
 
