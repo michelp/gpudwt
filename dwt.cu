@@ -225,6 +225,30 @@ int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantis
     return 0;
 }
 
+void samplesToChar(unsigned char * dst, float * src, int samplesNum)
+{
+    int i;
+
+    for(i = 0; i < samplesNum; i++) {
+        float r = (src[i]+0.5f) * 255;
+        if (r > 255) r = 255; 
+        if (r < 0)   r = 0; 
+        dst[i] = (unsigned char)r;
+    }
+}
+
+void samplesToChar(unsigned char * dst, int * src, int samplesNum)
+{
+    int i;
+
+    for(i = 0; i < samplesNum; i++) {
+        int r = dst[i]+127;
+        if (r > 255) r = 255;
+        if (r < 0)   r = 0; 
+        dst[i] = (unsigned char)r;
+    }
+}
+
 int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight, 
                      int stages, const char * filename, const char * suffix) 
 {
@@ -327,20 +351,9 @@ int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight,
         }
     }
 
-    //write component
-    for(i = 0; i < samplesNum; i++) {
-        //float r = (dst[i]+0.5f) * 255;
-        float r = dst[i]+127;
-        if (r > 255) {
-            //printf("%f ", r);
-            r = 255;
-        }
-        if (r < 0) {
-            //printf("%f ", r);
-            r = 0; 
-        }
-        result[i] = (unsigned char)r;//(unsigned char)((dst[i]+0.5f) * 255);
-    }
+    /* Write component */
+    samplesToChar(result, dst, samplesNum);
+
     char outfile[strlen(filename)+strlen(suffix)];
     strcpy(outfile, filename);
     strcpy(outfile+strlen(filename), suffix);
