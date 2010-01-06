@@ -372,7 +372,89 @@ __global__ void fdwt97(T *src, T *out, int width, int height, enum dwtfilter fil
 
 }
 
-__global__ void rdwt97(float *src, float *out, int width, int height)
+__device__ void computeRDwt97(float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
+{
+    int n = threadIdx.y*2; //even samples
+
+    /*** COL-WISE ***/
+    //unscale 
+    f_blockData[n][threadIdx.x] = f_blockData[n][threadIdx.x] * (float)K; // sude
+    f_blockData[n+1][threadIdx.x] = f_blockData[n+1][threadIdx.x] / (float)K; //liche
+    __syncthreads();
+
+    // Undo Update 2
+    colUpdate(-1*(float)D, n, f_blockData); 
+    __syncthreads();
+
+    //Undo Predict 2
+    n++; //odd samples
+    colPredict(-1*(float)C, n, f_blockData);
+    __syncthreads();
+
+    // Undo Update 1
+    n--; //even samples
+    colUpdate(-1*(float)B, n, f_blockData); 
+    __syncthreads();
+
+    //Undo Predict 1
+    n++; //odd samples
+    colPredict(-1*(float)A, n, f_blockData);
+    __syncthreads();
+
+    /*** ROW-WISE ***/
+    //unscale 
+    n--; //even samples
+    f_blockData[threadIdx.x][n] = f_blockData[threadIdx.x][n] * (float)K; // sude
+    f_blockData[threadIdx.x][n+1] = f_blockData[threadIdx.x][n+1] / (float)K; //liche
+    __syncthreads();
+
+    // Undo Update 2
+    rowUpdate(-1*(float)D, n, f_blockData); 
+    __syncthreads();
+
+    // Undo Predict 2
+    n++; //odd samples
+    rowPredict(-1*(float)C, n, f_blockData);
+    __syncthreads();
+
+    // Undo Update 1
+    n--; //even samples
+    rowUpdate(-1*(float)B, n, f_blockData); 
+    __syncthreads();
+
+    // Undo Predict 1
+    n++; //even samples
+    rowPredict(-1*(float)A, n, f_blockData);
+    __syncthreads();
+}
+
+__device__ void computeRDwt53(float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
+{
+    int n = threadIdx.y*2; //even samples
+
+    /*** COL-WISE ***/
+    // Undo Update 1
+    colUpdate(-1*(float)U53, n, f_blockData); 
+    __syncthreads();
+
+    //Undo Predict 1
+    n++; //odd samples
+    colPredict(-1*(float)P53, n, f_blockData);
+    __syncthreads();
+
+    /*** ROW-WISE ***/
+    // Undo Update 1
+    rowUpdate(-1*(float)U53, n, f_blockData); 
+    __syncthreads();
+
+    // Undo Predict 1
+    n++; //odd samples
+    rowPredict(-1*(float)P53, n, f_blockData);
+    __syncthreads();
+}
+
+template<typename T>
+__global__ void rdwt97(T *src, T *out, int width, int height, enum dwtfilter filter)
 {
 
     const int   globalTileX = IMUL(blockIdx.x, DWT_BLOCK_SIZE_X);
@@ -441,58 +523,15 @@ __global__ void rdwt97(float *src, float *out, int width, int height)
 
     __syncthreads();
 
-    int n = threadIdx.y*2; //even samples
-
-    /*** COL-WISE ***/
-    //unscale 
-    f_blockData[n][threadIdx.x] = f_blockData[n][threadIdx.x] * (float)K; // sude
-    f_blockData[n+1][threadIdx.x] = f_blockData[n+1][threadIdx.x] / (float)K; //liche
-    __syncthreads();
-
-    // Undo Update 2
-    colUpdate(-1*(float)D, n, f_blockData); 
-    __syncthreads();
-
-    //Undo Predict 2
-    n++; //odd samples
-    colPredict(-1*(float)C, n, f_blockData);
-    __syncthreads();
-
-    // Undo Update 1
-    n--; //even samples
-    colUpdate(-1*(float)B, n, f_blockData); 
-    __syncthreads();
-
-    //Undo Predict 1
-    n++; //odd samples
-    colPredict(-1*(float)A, n, f_blockData);
-    __syncthreads();
-
-    /*** ROW-WISE ***/
-    //unscale 
-    n--; //even samples
-    f_blockData[threadIdx.x][n] = f_blockData[threadIdx.x][n] * (float)K; // sude
-    f_blockData[threadIdx.x][n+1] = f_blockData[threadIdx.x][n+1] / (float)K; //liche
-    __syncthreads();
-
-    // Undo Update 2
-    rowUpdate(-1*(float)D, n, f_blockData); 
-    __syncthreads();
-
-    // Undo Predict 2
-    n++; //odd samples
-    rowPredict(-1*(float)C, n, f_blockData);
-    __syncthreads();
-
-    // Undo Update 1
-    n--; //even samples
-    rowUpdate(-1*(float)B, n, f_blockData); 
-    __syncthreads();
-
-    // Undo Predict 1
-    n++; //even samples
-    rowPredict(-1*(float)A, n, f_blockData);
-    __syncthreads();
+    /* Compute DWT */
+    switch (filter) {
+        case dwt97:
+            computeRDwt97(f_blockData);
+            break;
+        case dwt53:
+            computeRDwt53(f_blockData);
+            break;
+    }
 
     //store data
     int sharedIdxY = IMUL(threadIdx.y, 2);
