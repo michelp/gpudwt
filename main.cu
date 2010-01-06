@@ -50,8 +50,6 @@ struct dwt {
     T * c_r;
     T * c_g;
     T * c_b;
-    int mantissa;
-    int exponent;
     int dwtLvls;
 };
 
@@ -83,7 +81,7 @@ void usage() {
 }
 
 template <typename T>
-void forwardDWT(struct dwt<T> *d)
+void processDWT(struct dwt<T> *d, int forward)
 {
     int componentSize = d->pixWidth*d->pixHeight*sizeof(T);
 
@@ -115,11 +113,11 @@ void forwardDWT(struct dwt<T> *d)
         /* Forward DWT 9/7 */
 
         /* Compute DWT */
-        nStage2dFDWT97(d->c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->mantissa, d->exponent, d->dwtLvls);
+        nStage2dFDWT97(d->c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT97(d->c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->mantissa, d->exponent, d->dwtLvls);
+        nStage2dFDWT97(d->c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT97(d->c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->mantissa, d->exponent, d->dwtLvls);
+        nStage2dFDWT97(d->c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
         /* Store DWT to file */
         writeNStage2DDWT(d->c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
@@ -136,7 +134,7 @@ void forwardDWT(struct dwt<T> *d)
         bwToComponent(d->c_r, d->srcImg, d->pixWidth, d->pixHeight);
 
         /* Compute DWT */
-        nStage2dFDWT97(d->c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->mantissa, d->exponent, d->dwtLvls);
+        nStage2dFDWT97(d->c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         /* Store DWT to file */
         writeNStage2DDWT(d->c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
     }
@@ -167,10 +165,6 @@ int main(int argc, char **argv)
     int dwtLvls   = 3; //default numuber of DWT levels
     int device    = 0;
     int forward   = 1; //forward transform
-    int mantissa  = 0;
-    int exponent  = 0;
-    //char * srcFilename;
-    //char * outFilename;
     char * pos;
 
     while ((ch = getopt_long(argc, argv, "d:c:b:l:D:h", longopts, &optindex)) != -1) {
@@ -230,8 +224,6 @@ int main(int argc, char **argv)
     d->pixWidth = pixWidth;
     d->pixHeight = pixHeight;
     d->components = compCount;
-    d->mantissa = mantissa;
-    d->exponent = exponent;
     d->dwtLvls  = dwtLvls;
 
     // device init
@@ -287,7 +279,7 @@ int main(int argc, char **argv)
 
     /* DWT */
     if (forward == 1)
-        forwardDWT<float>(d);
+        processDWT<float>(d, forward);
 
     //writeComponent(r_cuda, pixWidth, pixHeight, srcFilename, ".g");
     //writeComponent(g_wave_cuda, 512000, ".g");
