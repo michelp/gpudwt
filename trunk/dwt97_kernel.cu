@@ -39,45 +39,6 @@
 #define D  0.443506852043971
 #define K  1.230174104914001
 
-#define BAND_LL 0
-#define BAND_HL 1
-#define BAND_LH 1
-#define BAND_HH 2
-
-__device__ float dequantize(float s, float delta, int band, int quantizeAllBands) 
-{
-    return 0; //FIXME disabled for now
-
-    // quantize LL band only if quantizeAllBands != 0
-    //if ((quantizeAllBands == 0 && band == BAND_LL) || delta == 1)
-    //    return s;
-    //
-    //return (s != 0 ? (s+0.5f)*(delta*__powf(2,band)) : 0);
-}
-
-__device__ float quantize(float s, float delta, int band, int quantizeAllBands) 
-{
-    return s; //FIXME disabled for now
-//    // quantize LL band only if quantizeAllBands != 0
-//    if (quantizeAllBands == 0 && band == BAND_LL)
-//        return s;
-//
-//    //TODO RANGING - ensure that s is within bounds  -1 < s < 1
-//    //               how does number < 1 look like? 0.9999?
-//    //if (fabsf(s) > 1) {
-//    //    if (s < 0) {
-//    //        s = -0.9999;
-//    //    }else {
-//    //        s =  0.9999;
-//    //    }
-//    //}
-//        
-//
-//    //FIXME would it be possible to make tis faster? (it adds 0.1ms on HD img, GTX 285)
-//    //return floorf(s / __powf(2,-1*(exponent+curStage-stages)) * (1 + mantissa/2048.0f));
-//    return floorf(s / (delta*__powf(2,band)));
-}
-
 __device__ void rowPredict97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X+1])
 {
     float _x,x,x_;
@@ -150,7 +111,7 @@ __device__ void colUpdate97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y
     }
 }
 
-__global__ void fdwt97(float *src, float *out, int width, int height, float delta, int quantizeAllBands)
+__global__ void fdwt97(float *src, float *out, int width, int height)
 {
     __shared__ float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1];
 
@@ -334,7 +295,7 @@ __global__ void fdwt97(float *src, float *out, int width, int height, float delt
         }
         rowStart += sharedHalfY*IMUL(evenLinesCount, evenSampCount);
 
-        out[rowStart + globalThreadX] = quantize(f_blockData[sharedY][sharedX], delta, sharedHalfY, quantizeAllBands);
+        out[rowStart + globalThreadX] = f_blockData[sharedY][sharedX];
 
         // odd lines (LH and HH)
         sharedY++;
@@ -348,14 +309,14 @@ __global__ void fdwt97(float *src, float *out, int width, int height, float delt
             }
         //    rowStart += IMUL(globalThreadY, (sharedHalfY*evenSampCount + (!sharedHalfY)*oddSampCount));
             rowStart += sharedHalfY*IMUL(oddLinesCount, evenSampCount);
-            out[rowStart + globalThreadX] = quantize(f_blockData[sharedY][sharedX], delta, sharedHalfY+1, quantizeAllBands);
+            out[rowStart + globalThreadX] = f_blockData[sharedY][sharedX];
         }
     }
 #endif
 
 }
 
-__global__ void rdwt97(float *src, float *out, int width, int height, float delta, int quantizeAllBands)
+__global__ void rdwt97(float *src, float *out, int width, int height)
 {
     __shared__ float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1];
 
@@ -407,7 +368,7 @@ __global__ void rdwt97(float *src, float *out, int width, int height, float delt
     }
     rowStart += sharedHalfY*IMUL(evenLinesCount, evenSampCount);
 
-    f_blockData[sharedY][sharedX] = dequantize(src[rowStart + globalThreadX], delta, sharedHalfY, quantizeAllBands);
+    f_blockData[sharedY][sharedX] = src[rowStart + globalThreadX];
 
     globalThreadY = globalTileY + threadIdx.y*2 + sharedHalfX - sharedHalfY*(DWT_BLOCK_SIZE_Y);
     if (globalThreadY >= oddLinesCount)
@@ -421,7 +382,7 @@ __global__ void rdwt97(float *src, float *out, int width, int height, float delt
     } else {
         rowStart += IMUL(globalThreadY, oddSampCount);
     }
-    f_blockData[sharedY][sharedX] = dequantize(src[rowStart + globalThreadX], delta, sharedHalfY+1, quantizeAllBands);
+    f_blockData[sharedY][sharedX] = src[rowStart + globalThreadX];
 
     __syncthreads();
 

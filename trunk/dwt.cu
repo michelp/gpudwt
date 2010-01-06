@@ -39,7 +39,7 @@
 #include "common.h"
 #include "dwt97_kernel.cu"
 
-int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int mantissa, int exponent, int stages)
+int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages)
 {
     int i;
     int width  = 2 * pixWidth;
@@ -49,12 +49,6 @@ int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
     struct timeval tv_start;
     struct timeval tv_end;
     float duration;
-    float delta;
-    float deltaBase;
-    int quantizeAllBands = 0;
-
-    deltaBase = powf(2,-1*exponent) * (1 + mantissa/2048.0f);
-    //printf("deltaBase %f\n", deltaBase);
 
     CTIMERINIT;
 
@@ -70,14 +64,8 @@ int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
         printf("    Img dim: \t\t%d x %d\n", width, height);
         printf("    Block dim (x,y): \t%d x %d\n    Grid dim(x,y): \t%d x %d\n", threads.x, threads.y, grid.x, grid.y);
 
-        if (i == stages - 1)
-            quantizeAllBands = 1;
-
-        delta = powf(2,-1*(i+1-stages)) * deltaBase;
-        printf("    Q-delta: \t\t%f, %d\n", delta, quantizeAllBands);
-
         CTIMERSTART(cstart);
-        fdwt97<<<grid, threads>>>(in, tempBuf, width, height, delta, quantizeAllBands);
+        fdwt97<<<grid, threads>>>(in, tempBuf, width, height);
         cudaCheckAsyncError("Forward DWT 9/7 kernel");
         CTIMERSTOP(cstop);
 
@@ -97,7 +85,7 @@ int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
     return 0;
 }
 
-int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int mantissa, int exponent, int stages)
+int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages)
 {
     struct stageDim {
         int x;
@@ -110,12 +98,6 @@ int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
     int height;
     dim3 threads(DWT_BLOCK_SIZE_X, DWT_BLOCK_SIZE_Y);
     dim3 grid;
-    float delta;
-    float deltaBase;
-    int quantizeAllBands = 1;
-
-    deltaBase = powf(2,-1*exponent) * (1 + mantissa/2048.0f);
-    delta = deltaBase;
 
     CTIMERINIT;
 
@@ -140,10 +122,9 @@ int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
         printf("  * Reverse 2D DWT 9/7, Stage %d:\n", i);
         printf("    Img dim: \t\t%d x %d\n", width, height);
         printf("    Block dim (x,y): \t%d x %d\n    Grid dim(x,y): \t%d x %d\n", threads.x, threads.y, grid.x, grid.y);
-        printf("    Q-delta: \t\t%f, %d\n", delta, quantizeAllBands);
 
         CTIMERSTART(cstart);
-        rdwt97<<<grid, threads>>>(in, tempBuf, width, height, delta, quantizeAllBands);
+        rdwt97<<<grid, threads>>>(in, tempBuf, width, height);
         cudaCheckAsyncError("Reverse DWT 9/7 kernel");
         CTIMERSTOP(cstop);
 
@@ -156,9 +137,6 @@ int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
 
         printf("    memcpy *tempBuf to *in: \t%f ms, BW: \t%f GB/s\n", elapsedTime,
         ((float)(pixHeight*pixWidth*sizeof(float)/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
-
-        quantizeAllBands = 0;
-        delta = powf(2,-1*(i-stages)) * deltaBase;
     }
 
     free(sd);
@@ -166,18 +144,13 @@ int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
     return 0;
 }
 
-int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantissa, int exponent, int curStage, int stages)
+int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages)
 {
     //timing 
     CTIMERINIT;
 
     int samplesNum = pixWidth*pixHeight;
     float inputSize = samplesNum*sizeof(float);
-    float delta = powf(2,-1*(exponent+curStage-stages)) * (1 + mantissa/2048.0f);
-    int quantizeAllBands = 0;
-
-    if (curStage == stages)
-        quantizeAllBands = 1;
 
     // Kernell 1D DWT
     dim3 threads(DWT_BLOCK_SIZE_X, DWT_BLOCK_SIZE_Y);
@@ -185,7 +158,7 @@ int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantis
     printf("Block dim: %d x %d\n Grid dim: %d x %d\n", threads.x, threads.y, grid.x, grid.y);
 
     CTIMERSTART(cstart);
-    fdwt97<<<grid, threads>>>(in, out, pixWidth, pixHeight, delta, quantizeAllBands);
+    fdwt97<<<grid, threads>>>(in, out, pixWidth, pixHeight);
     cudaCheckAsyncError("Forward DWT 9/7 kernel");
     CTIMERSTOP(cstop);
 
@@ -197,17 +170,12 @@ int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantis
     return 0;
 }
 
-int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantissa, int exponent, int curStage, int stages)
+int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages)
 {
     //timing 
     CTIMERINIT;
 
     int samplesNum = pixWidth*pixHeight;
-    float delta = powf(2,-1*(exponent+curStage-stages)) * (1 + mantissa/2048.0f);
-    int quantizeAllBands = 0;
-
-    if (curStage == stages)
-        quantizeAllBands = 1;
 
     // Kernell
     dim3 threads(DWT_BLOCK_SIZE_X, DWT_BLOCK_SIZE_Y);
@@ -216,7 +184,7 @@ int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantis
     assert(samplesNum % 2 == 0);
 
     CTIMERSTART(cstart);
-    rdwt97<<<grid, threads>>>(in, out,pixWidth, pixHeight, delta, quantizeAllBands);
+    rdwt97<<<grid, threads>>>(in, out,pixWidth, pixHeight);
     cudaCheckAsyncError("Reverse DWT 9/7 kernel");
     CTIMERSTOP(cstop);
 
