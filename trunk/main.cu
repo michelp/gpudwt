@@ -114,11 +114,11 @@ void processDWT(struct dwt *d, int forward)
         /* Forward DWT 9/7 */
 
         /* Compute DWT */
-        nStage2dFDWT97(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT97(c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT(c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT97(c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT(c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
         /* Store DWT to file */
         writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
@@ -143,7 +143,7 @@ void processDWT(struct dwt *d, int forward)
         bwToComponent(c_r, d->srcImg, d->pixWidth, d->pixHeight);
 
         /* Compute DWT */
-        nStage2dFDWT97(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         /* Store DWT to file */
         writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
 
