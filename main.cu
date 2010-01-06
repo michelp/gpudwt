@@ -39,7 +39,6 @@
 #include "components.h"
 #include "dwt.h"
 
-template <typename T>
 struct dwt {
     char * srcFilename;
     char * outFilename;
@@ -47,9 +46,6 @@ struct dwt {
     int pixWidth;
     int pixHeight;
     int components;
-    T * c_r;
-    T * c_g;
-    T * c_b;
     int dwtLvls;
 };
 
@@ -77,11 +73,15 @@ void usage() {
   -c, --components\t\tnumber of color components, default 3\n\
   -b, --depth\t\t\tbit depth, default 8\n\
   -l, --level\t\t\tDWT level, default 3\n\
-  -D, --device\t\t\tcuda device\n");
+  -D, --device\t\t\tcuda device\n\
+  -f, --forward\t\t\tforward transform\n\
+  -r, --reverse\t\t\treverse transform\n\
+  --97\t\t\t9/7 transform\n\
+  --53\t\t\t5/3 transform\n");
 }
 
 template <typename T>
-void processDWT(struct dwt<T> *d, int forward)
+void processDWT(struct dwt *d, int forward)
 {
     int componentSize = d->pixWidth*d->pixHeight*sizeof(T);
 
@@ -93,50 +93,62 @@ void processDWT(struct dwt<T> *d, int forward)
 
     if (d->components == 3) {
         /* Load components */
-        cudaMalloc((void**)&(d->c_r), componentSize); //< R, aligned component size
+        T *c_r, *c_g, *c_b;
+        cudaMalloc((void**)&c_r, componentSize); //< R, aligned component size
         cudaCheckError("Alloc device memory");
-        cudaMemset(d->c_r, 0, componentSize);
+        cudaMemset(c_r, 0, componentSize);
         cudaCheckError("Memset device memory");
 
-        cudaMalloc((void**)&(d->c_g), componentSize); //< G, aligned component size
+        cudaMalloc((void**)&c_g, componentSize); //< G, aligned component size
         cudaCheckError("Alloc device memory");
-        cudaMemset(d->c_g, 0, componentSize);
+        cudaMemset(c_g, 0, componentSize);
         cudaCheckError("Memset device memory");
 
-        cudaMalloc((void**)&(d->c_b), componentSize); //< B, aligned component size
+        cudaMalloc((void**)&c_b, componentSize); //< B, aligned component size
         cudaCheckError("Alloc device memory");
-        cudaMemset(d->c_b, 0, componentSize);
+        cudaMemset(c_b, 0, componentSize);
         cudaCheckError("Memset device memory");
 
-        rgbToComponents(d->c_r, d->c_g, d->c_b, d->srcImg, d->pixWidth, d->pixHeight);
+        rgbToComponents(c_r, c_g, c_b, d->srcImg, d->pixWidth, d->pixHeight);
 
         /* Forward DWT 9/7 */
 
         /* Compute DWT */
-        nStage2dFDWT97(d->c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT97(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT97(d->c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT97(c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT97(d->c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT97(c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
         /* Store DWT to file */
-        writeNStage2DDWT(d->c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
-        writeNStage2DDWT(d->c_g, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".g");
-        writeNStage2DDWT(d->c_b, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".b");
+        writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
+        writeNStage2DDWT(c_g, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".g");
+        writeNStage2DDWT(c_b, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".b");
+
+        cudaFree(c_r);
+        cudaCheckError("Cuda free");
+        cudaFree(c_g);
+        cudaCheckError("Cuda free");
+        cudaFree(c_b);
+        cudaCheckError("Cuda free");
 
     } else if (d->components == 1) {
         //Load component
-        cudaMalloc((void**)&(d->c_r), componentSize); //< R, aligned component size
+        T *c_r;
+        cudaMalloc((void**)&(c_r), componentSize); //< R, aligned component size
         cudaCheckError("Alloc device memory");
-        cudaMemset(d->c_r, 0, componentSize);
+        cudaMemset(c_r, 0, componentSize);
         cudaCheckError("Memset device memory");
 
-        bwToComponent(d->c_r, d->srcImg, d->pixWidth, d->pixHeight);
+        bwToComponent(c_r, d->srcImg, d->pixWidth, d->pixHeight);
 
         /* Compute DWT */
-        nStage2dFDWT97(d->c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dFDWT97(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         /* Store DWT to file */
-        writeNStage2DDWT(d->c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
+        writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
+
+        cudaFree(c_r);
+        cudaCheckError("Cuda free");
     }
 
     cudaFree(c_tempbuf);
@@ -155,6 +167,8 @@ int main(int argc, char **argv)
         {"device",      required_argument, 0, 'D'}, //cuda device
         {"forward",     no_argument,       0, 'f'}, //forward transform
         {"reverse",     no_argument,       0, 'r'}, //forward transform
+        {"97",          no_argument,       0, '9'}, //9/7 transform
+        {"53",          no_argument,       0, '5' }, //5/3transform
         {"help",        no_argument,       0, 'h'}  
     };
     
@@ -165,6 +179,7 @@ int main(int argc, char **argv)
     int dwtLvls   = 3; //default numuber of DWT levels
     int device    = 0;
     int forward   = 1; //forward transform
+    int dwt97     = 1; //1=dwt9/7, 0=dwt5/3 transform
     char * pos;
 
     while ((ch = getopt_long(argc, argv, "d:c:b:l:D:h", longopts, &optindex)) != -1) {
@@ -193,6 +208,9 @@ int main(int argc, char **argv)
         case 'r':
             forward = 0;
             break;
+        case '5':
+            dwt97 = 0;
+            break;
         case 'h':
             usage();
             return 0;
@@ -218,14 +236,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    struct dwt<float> *d;
-    d = (struct dwt<float> *)malloc(sizeof(struct dwt<float>));
-    d->srcImg = NULL;
-    d->pixWidth = pixWidth;
-    d->pixHeight = pixHeight;
-    d->components = compCount;
-    d->dwtLvls  = dwtLvls;
-
     // device init
     int devCount;
     cudaGetDeviceCount(&devCount);
@@ -250,6 +260,14 @@ int main(int argc, char **argv)
     cudaSetDevice(device);
     cudaCheckError("Set selected device");
 
+    struct dwt *d;
+    d = (struct dwt *)malloc(sizeof(struct dwt));
+    d->srcImg = NULL;
+    d->pixWidth = pixWidth;
+    d->pixHeight = pixHeight;
+    d->components = compCount;
+    d->dwtLvls  = dwtLvls;
+
     // file names
     d->srcFilename = (char *)malloc(strlen(argv[0]));
     strcpy(d->srcFilename, argv[0]);
@@ -267,6 +285,8 @@ int main(int argc, char **argv)
     printf(" Components count:\t%d\n", compCount);
     printf(" Bit depth:\t\t%d\n", bitDepth);
     printf(" DWT levels:\t\t%d\n", dwtLvls);
+    printf(" Forward transform:\t%d\n", forward);
+    printf(" 9/7 transform:\t\t%d\n", dwt97);
     
     //data sizes
     int inputSize = pixWidth*pixHeight*compCount; //<amount of data (in bytes) to proccess
@@ -278,8 +298,18 @@ int main(int argc, char **argv)
         return -1;
 
     /* DWT */
-    if (forward == 1)
-        processDWT<float>(d, forward);
+    if (forward == 1) {
+        if(dwt97 == 1 )
+            processDWT<float>(d, forward);
+        else // 5/3
+            processDWT<int>(d, forward);
+    }
+    else { // reverse
+        if(dwt97 == 1 )
+            processDWT<float>(d, forward);
+        else // 5/3
+            processDWT<int>(d, forward);
+    }
 
     //writeComponent(r_cuda, pixWidth, pixHeight, srcFilename, ".g");
     //writeComponent(g_wave_cuda, 512000, ".g");
@@ -287,12 +317,6 @@ int main(int argc, char **argv)
     //writeComponent(b_wave_cuda, componentSize, ".b");
     cudaFreeHost(d->srcImg);
     cudaCheckError("Cuda free host");
-    cudaFree(d->c_r);
-    cudaCheckError("Cuda free");
-    cudaFree(d->c_g);
-    cudaCheckError("Cuda free");
-    cudaFree(d->c_b);
-    cudaCheckError("Cuda free");
 
     return 0;
 }
