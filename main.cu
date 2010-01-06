@@ -126,13 +126,6 @@ void forwardDWT(struct dwt<T> *d)
         writeNStage2DDWT(d->c_g, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".g");
         writeNStage2DDWT(d->c_b, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".b");
 
-        /* Clean up */
-        cudaFree(d->c_r);
-        cudaCheckError("Cuda free device");
-        cudaFree(d->c_g);
-        cudaCheckError("Cuda free device");
-        cudaFree(d->c_b);
-        cudaCheckError("Cuda free device");
     } else if (d->components == 1) {
         //Load component
         cudaMalloc((void**)&(d->c_r), componentSize); //< R, aligned component size
@@ -142,16 +135,10 @@ void forwardDWT(struct dwt<T> *d)
 
         bwToComponent(d->c_r, d->srcImg, d->pixWidth, d->pixHeight);
 
-        /* Forward DWT 9/7 */
-
         /* Compute DWT */
         nStage2dFDWT97(d->c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->mantissa, d->exponent, d->dwtLvls);
         /* Store DWT to file */
         writeNStage2DDWT(d->c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
-
-        /* Clean up */
-        cudaFree(d->c_r);
-        cudaCheckError("Cuda free device");
     }
 
     cudaFree(c_tempbuf);
@@ -308,6 +295,12 @@ int main(int argc, char **argv)
     //writeComponent(b_wave_cuda, componentSize, ".b");
     cudaFreeHost(d->srcImg);
     cudaCheckError("Cuda free host");
+    cudaFree(d->c_r);
+    cudaCheckError("Cuda free");
+    cudaFree(d->c_g);
+    cudaCheckError("Cuda free");
+    cudaFree(d->c_b);
+    cudaCheckError("Cuda free");
 
     return 0;
 }
