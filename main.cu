@@ -215,38 +215,25 @@ int main(int argc, char **argv)
         rgbToComponents(c_r_comp, c_g_comp, c_b_comp, srcImg, pixWidth, pixHeight);
 
         /* Forward DWT 9/7 */
-        float *c_r_wave, *c_g_wave, *c_b_wave;
-        cudaMalloc((void**)&c_r_wave, componentSize); //< R, aligned component size
+        float *c_tempbuf;
+        cudaMalloc((void**)&c_tempbuf, componentSize); //< R, aligned component size
         cudaCheckError("Alloc device memory");
-        cudaMemset(c_r_wave, 0, componentSize);
-        cudaCheckError("Memset device memory");
-
-        cudaMalloc((void**)&c_g_wave, componentSize); //< G, aligned component size
-        cudaCheckError("Alloc device memory");
-        cudaMemset(c_g_wave, 0, componentSize);
-        cudaCheckError("Memset device memory");
-
-        cudaMalloc((void**)&c_b_wave, componentSize); //< B, aligned component size
-        cudaCheckError("Alloc device memory");
-        cudaMemset(c_b_wave, 0, componentSize);
+        cudaMemset(c_tempbuf, 0, componentSize);
         cudaCheckError("Memset device memory");
 
         /* Compute DWT */
-        nStage2dFDWT97(c_r_comp, c_r_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
-        nStage2dFDWT97(c_g_comp, c_g_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
-        nStage2dFDWT97(c_b_comp, c_b_wave, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        nStage2dFDWT97(c_r_comp, c_tempbuf, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        cudaMemset(c_tempbuf, 0, componentSize);
+        nStage2dFDWT97(c_g_comp, c_tempbuf, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        cudaMemset(c_tempbuf, 0, componentSize);
+        nStage2dFDWT97(c_b_comp, c_tempbuf, pixWidth, pixHeight, mantissa, exponent, dwtLvls);
+        cudaMemset(c_tempbuf, 0, componentSize);
         /* Store DWT to file */
         writeNStage2DDWT(c_r_comp, pixWidth, pixHeight, dwtLvls, srcFilename, ".r.dwt");
         writeNStage2DDWT(c_g_comp, pixWidth, pixHeight, dwtLvls, srcFilename, ".g.dwt");
         writeNStage2DDWT(c_b_comp, pixWidth, pixHeight, dwtLvls, srcFilename, ".b.dwt");
 
         /* Clean up */
-        cudaFree(c_r_wave);
-        cudaCheckError("Cuda free device");
-        cudaFree(c_g_wave);
-        cudaCheckError("Cuda free device");
-        cudaFree(c_b_wave);
-        cudaCheckError("Cuda free device");
         cudaFree(c_r_comp);
         cudaCheckError("Cuda free device");
         cudaFree(c_g_comp);
