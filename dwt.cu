@@ -88,7 +88,7 @@ int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
         cudaCheckError("Memcopy device to device");
         CTIMERSTOP(cstop);
         printf("    memcpy *tempBuf to *in: \t%f ms, BW: \t%f GB/s\n", elapsedTime,
-        ((float)(pixHeight*pixWidth*sizeof(float)/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
+        ((float)(width*height*sizeof(float)/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
     }
     gettimeofday(&tv_end, NULL);
     duration = tv_end.tv_usec - tv_start.tv_usec;
