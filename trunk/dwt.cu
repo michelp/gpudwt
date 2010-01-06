@@ -41,13 +41,13 @@
 
 inline void fdwt(dim3 grid, dim3 threads, float *in, float *tempBuf, int width, int height)
 {
-        fdwt97<float><<<grid, threads>>>(in, tempBuf, width, height, dwt97);
+        fdwt<float><<<grid, threads>>>(in, tempBuf, width, height, dwt97);
         cudaCheckAsyncError("Forward DWT 9/7 kernel");
 }
 
 inline void fdwt(dim3 grid, dim3 threads, int *in, int *tempBuf, int width, int height)
 {
-        fdwt97<int><<<grid, threads>>>(in, tempBuf, width, height, dwt53);
+        fdwt<int><<<grid, threads>>>(in, tempBuf, width, height, dwt53);
         cudaCheckAsyncError("Forward DWT 5/3 kernel");
 }
 
@@ -101,13 +101,13 @@ template int nStage2dFDWT<int>(int * in, int * tempBuf, int pixWidth, int pixHei
 
 inline void rdwt(dim3 grid, dim3 threads, float *in, float *tempBuf, int width, int height)
 {
-        rdwt97<float><<<grid, threads>>>(in, tempBuf, width, height, dwt97);
+        rdwt<float><<<grid, threads>>>(in, tempBuf, width, height, dwt97);
         cudaCheckAsyncError("Forward DWT 9/7 kernel");
 }
 
 inline void rdwt(dim3 grid, dim3 threads, int *in, int *tempBuf, int width, int height)
 {
-        rdwt97<int><<<grid, threads>>>(in, tempBuf, width, height, dwt53);
+        rdwt<int><<<grid, threads>>>(in, tempBuf, width, height, dwt53);
         cudaCheckAsyncError("Forward DWT 5/3 kernel");
 }
 
@@ -184,7 +184,7 @@ int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int curSta
     printf("Block dim: %d x %d\n Grid dim: %d x %d\n", threads.x, threads.y, grid.x, grid.y);
 
     CTIMERSTART(cstart);
-    fdwt97<float><<<grid, threads>>>(in, out, pixWidth, pixHeight, dwt97);
+    fdwt<float><<<grid, threads>>>(in, out, pixWidth, pixHeight, dwt97);
     cudaCheckAsyncError("Forward DWT 9/7 kernel");
     CTIMERSTOP(cstop);
 
@@ -210,7 +210,7 @@ int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int curSta
     assert(samplesNum % 2 == 0);
 
     CTIMERSTART(cstart);
-    rdwt97<float><<<grid, threads>>>(in, out,pixWidth, pixHeight, dwt97);
+    rdwt<float><<<grid, threads>>>(in, out,pixWidth, pixHeight, dwt97);
     cudaCheckAsyncError("Reverse DWT 9/7 kernel");
     CTIMERSTOP(cstop);
 

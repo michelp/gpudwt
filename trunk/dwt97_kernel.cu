@@ -220,7 +220,7 @@ __device__ void computeFDwt53(float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SI
 
 
 template<typename T>
-__global__ void fdwt97(T *src, T *out, int width, int height, enum dwtfilter filter)
+__global__ void fdwt(T *src, T *out, int width, int height, enum dwtfilter filter)
 {
 
     const int   globalTileX = IMUL(blockIdx.x, DWT_BLOCK_SIZE_X);
@@ -454,7 +454,7 @@ __device__ void computeRDwt53(float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SI
 }
 
 template<typename T>
-__global__ void rdwt97(T *src, T *out, int width, int height, enum dwtfilter filter)
+__global__ void rdwt(T *src, T *out, int width, int height, enum dwtfilter filter)
 {
 
     const int   globalTileX = IMUL(blockIdx.x, DWT_BLOCK_SIZE_X);
