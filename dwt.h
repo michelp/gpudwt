@@ -31,7 +31,7 @@ int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
 int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int mantissa, int exponent, int stages);
 
 int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantissa, int exponent, int curStage, int stages);
-int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight);
+int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int mantissa, int exponent, int curStage, int stages);
 
 
 int writeNStage2DDWT(float * component_cuda, int width, int height, 
