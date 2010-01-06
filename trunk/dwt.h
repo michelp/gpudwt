@@ -28,9 +28,10 @@
 #define _DWT_H
 
 template<typename T> 
-int nStage2dFDWT(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages);
+int nStage2dFDWT(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages);
 
-int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
+template<typename T> 
+int nStage2dRDWT(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages);
 
 int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages);
 int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages);
