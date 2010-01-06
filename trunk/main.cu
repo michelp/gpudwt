@@ -76,8 +76,8 @@ void usage() {
   -D, --device\t\t\tcuda device\n\
   -f, --forward\t\t\tforward transform\n\
   -r, --reverse\t\t\treverse transform\n\
-  --97\t\t\t9/7 transform\n\
-  --53\t\t\t5/3 transform\n");
+  -9, --97\t\t\t9/7 transform\n\
+  -5, --53\t\t\t5/3 transform\n");
 }
 
 template <typename T>
@@ -205,8 +205,14 @@ int main(int argc, char **argv)
         case 'D':
             device = atoi(optarg);
             break;
+        case 'f':
+            forward = 1;
+            break;
         case 'r':
             forward = 0;
+            break;
+        case '9':
+            dwt97 = 1;
             break;
         case '5':
             dwt97 = 0;
