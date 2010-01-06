@@ -39,7 +39,20 @@
 #include "common.h"
 #include "dwt97_kernel.cu"
 
-int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages)
+inline void fdwt(dim3 grid, dim3 threads, float *in, float *tempBuf, int width, int height)
+{
+        fdwt97<float><<<grid, threads>>>(in, tempBuf, width, height, dwt97);
+        cudaCheckAsyncError("Forward DWT 9/7 kernel");
+}
+
+inline void fdwt(dim3 grid, dim3 threads, int *in, int *tempBuf, int width, int height)
+{
+        fdwt97<int><<<grid, threads>>>(in, tempBuf, width, height, dwt53);
+        cudaCheckAsyncError("Forward DWT 5/3 kernel");
+}
+
+template<typename T>
+int nStage2dFDWT97(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages)
 {
     int i;
     int width  = 2 * pixWidth;
@@ -65,18 +78,17 @@ int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
         printf("    Block dim (x,y): \t%d x %d\n    Grid dim(x,y): \t%d x %d\n", threads.x, threads.y, grid.x, grid.y);
 
         CTIMERSTART(cstart);
-        fdwt97<<<grid, threads>>>(in, tempBuf, width, height);
-        cudaCheckAsyncError("Forward DWT 9/7 kernel");
+        fdwt(grid, threads, in, tempBuf, width, height);
         CTIMERSTOP(cstop);
 
         printf("    fdwt972d kernel: \t%f ms\n", elapsedTime);
 
         CTIMERSTART(cstart);
-        cudaMemcpy(in, tempBuf, width*height*sizeof(float), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(in, tempBuf, width*height*sizeof(T), cudaMemcpyDeviceToDevice);
         cudaCheckError("Memcopy device to device");
         CTIMERSTOP(cstop);
         printf("    memcpy *tempBuf to *in: \t%f ms, BW: \t%f GB/s\n", elapsedTime,
-        ((float)(width*height*sizeof(float)/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
+        ((float)(width*height*sizeof(T)/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
     }
     gettimeofday(&tv_end, NULL);
     duration = tv_end.tv_usec - tv_start.tv_usec;
@@ -84,6 +96,8 @@ int nStage2dFDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int
     
     return 0;
 }
+template int nStage2dFDWT97<float>(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
+template int nStage2dFDWT97<int>(int * in, int * tempBuf, int pixWidth, int pixHeight, int stages);
 
 int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages)
 {
@@ -158,7 +172,7 @@ int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int curSta
     printf("Block dim: %d x %d\n Grid dim: %d x %d\n", threads.x, threads.y, grid.x, grid.y);
 
     CTIMERSTART(cstart);
-    fdwt97<<<grid, threads>>>(in, out, pixWidth, pixHeight);
+    fdwt97<float><<<grid, threads>>>(in, out, pixWidth, pixHeight, dwt97);
     cudaCheckAsyncError("Forward DWT 9/7 kernel");
     CTIMERSTOP(cstop);
 
@@ -210,14 +224,15 @@ void samplesToChar(unsigned char * dst, int * src, int samplesNum)
     int i;
 
     for(i = 0; i < samplesNum; i++) {
-        int r = dst[i]+127;
+        int r = src[i]+128;
         if (r > 255) r = 255;
         if (r < 0)   r = 0; 
         dst[i] = (unsigned char)r;
     }
 }
 
-int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight, 
+template<typename T>
+int writeNStage2DDWT(T *component_cuda, int pixWidth, int pixHeight, 
                      int stages, const char * filename, const char * suffix) 
 {
     struct band {
@@ -232,7 +247,7 @@ int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight,
     };
 
     unsigned char * result;
-    float *src, *dst;
+    T *src, *dst;
     int i,s;
     int size;
     int offset;
@@ -272,10 +287,10 @@ int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight,
     }
 #endif
     
-    size = samplesNum*sizeof(float);
+    size = samplesNum*sizeof(T);
     cudaMallocHost((void **)&src, size);
     cudaCheckError("Malloc host");
-    dst = (float *)malloc(size);
+    dst = (T*)malloc(size);
     memset(src, 0, size);
     memset(dst, 0, size);
     result = (unsigned char *)malloc(samplesNum);
@@ -283,14 +298,14 @@ int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight,
     cudaCheckError("Memcopy device to host");
 
     // LL Band
-    size = bandDims[stages-1].LL.dimX * sizeof(float);
+    size = bandDims[stages-1].LL.dimX * sizeof(T);
     for (i = 0; i < bandDims[stages-1].LL.dimY; i++) {
         memcpy(dst+i*pixWidth, src+i*bandDims[stages-1].LL.dimX, size);
     }
 
     for (s = stages - 1; s >= 0; s--) {
         // HL Band
-        size = bandDims[s].HL.dimX * sizeof(float);
+        size = bandDims[s].HL.dimX * sizeof(T);
         offset = bandDims[s].LL.dimX * bandDims[s].LL.dimY;
         for (i = 0; i < bandDims[s].HL.dimY; i++) {
             memcpy(dst+i*pixWidth+bandDims[s].LL.dimX,
@@ -299,7 +314,7 @@ int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight,
         }
 
         // LH band
-        size = bandDims[s].LH.dimX * sizeof(float);
+        size = bandDims[s].LH.dimX * sizeof(T);
         offset += bandDims[s].HL.dimX * bandDims[s].HL.dimY;
         yOffset = bandDims[s].LL.dimY;
         for (i = 0; i < bandDims[s].HL.dimY; i++) {
@@ -309,7 +324,7 @@ int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight,
         }
 
         //HH band
-        size = bandDims[s].HH.dimX * sizeof(float);
+        size = bandDims[s].HH.dimX * sizeof(T);
         offset += bandDims[s].LH.dimX * bandDims[s].LH.dimY;
         yOffset = bandDims[s].HL.dimY;
         for (i = 0; i < bandDims[s].HH.dimY; i++) {
@@ -342,3 +357,5 @@ int writeNStage2DDWT(float * component_cuda, int pixWidth, int pixHeight,
 
     return 0;
 }
+template int writeNStage2DDWT<float>(float *component_cuda, int pixWidth, int pixHeight, int stages, const char * filename, const char * suffix); 
+template int writeNStage2DDWT<int>(int *component_cuda, int pixWidth, int pixHeight, int stages, const char * filename, const char * suffix); 

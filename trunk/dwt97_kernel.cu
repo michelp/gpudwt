@@ -33,13 +33,26 @@
 //#define D 0.4435068522
 //#define K 1.149604398 
 
-#define A -1.586134342059924
-#define B -0.052980118572961
-#define C  0.882911075530934
-#define D  0.443506852043971
-#define K  1.230174104914001
+/* 9/7 filters */
+#define A -1.58613434205992
+#define B -0.05298011857296
+#define C  0.88291107553093
+#define D  0.44350685204397
+#define K  1.23017410491400
 
-__device__ void rowPredict97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X+1])
+/* 5/3 filters*/
+#define P53 -0.5
+#define U53 0.25
+
+__shared__ float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1];
+
+enum dwtfilter
+{
+    dwt97,
+    dwt53
+};
+
+__device__ void rowPredict(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
 {
     float _x,x,x_;
     if (n < blockDim.x-1) {
@@ -57,7 +70,7 @@ __device__ void rowPredict97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_
     }
 }
 
-__device__ void rowUpdate97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X+1])
+__device__ void rowUpdate(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
 {
     float _x,x,x_;
     if (n > 0) {
@@ -75,7 +88,7 @@ __device__ void rowUpdate97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y
     }
 }
 
-__device__ void colPredict97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X+1])
+__device__ void colPredict(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
 {
     float _x,x,x_;
     if (n < blockDim.x-1) {
@@ -93,7 +106,7 @@ __device__ void colPredict97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_
     }
 }
 
-__device__ void colUpdate97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X+1])
+__device__ void colUpdate(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
 {
     float _x,x,x_;
     if (n > 0) {
@@ -111,9 +124,104 @@ __device__ void colUpdate97(float a, int n, float f_blockData[2*DWT_BLOCK_SIZE_Y
     }
 }
 
-__global__ void fdwt97(float *src, float *out, int width, int height)
+__device__ void computeFDwt97(float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
 {
-    __shared__ float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1];
+    /*** ROW-WISE ***/
+    //Predict 1
+    //float a = -1.586134342;
+    int n = threadIdx.y*2 + 1; //odd samples
+    rowPredict((float)A, n, f_blockData);
+    __syncthreads();
+
+    // Update 1
+    //a = -0.05298011854;
+    n--; //even samples
+    rowUpdate((float)B, n, f_blockData); 
+    __syncthreads();
+
+    //Predict 2
+    //a = 0.8829110762;
+    n++; //odd samples
+    rowPredict((float)C, n, f_blockData);
+    __syncthreads();
+
+    // Update 2
+    //a = 0.4435068522;
+    n--; //even samples
+    rowUpdate((float)D, n, f_blockData); 
+    __syncthreads();
+
+    //scale 
+    //a = 1.149604398;
+    f_blockData[threadIdx.x][n] = f_blockData[threadIdx.x][n] / (float)K; // sude
+    f_blockData[threadIdx.x][n+1] = f_blockData[threadIdx.x][n+1] * (float)K; //liche
+    __syncthreads();
+
+    /*** COL-WISE ***/
+    //Predict 1
+    //float a = -1.586134342;
+    n = threadIdx.y*2 + 1; //odd samples
+    colPredict((float)A, n, f_blockData);
+    __syncthreads();
+
+    // Update 1
+    //a = -0.05298011854;
+    n--; //even samples
+    colUpdate((float)B, n, f_blockData); 
+    __syncthreads();
+
+    //Predict 2
+    //a = 0.8829110762;
+    n++; //odd samples
+    colPredict((float)C, n, f_blockData);
+    __syncthreads();
+
+    // Update 2
+    //a = 0.4435068522;
+    n--; //even samples
+    colUpdate((float)D, n, f_blockData); 
+    __syncthreads();
+
+    //scale 
+    //a = 1.149604398;
+    f_blockData[n][threadIdx.x] = f_blockData[n][threadIdx.x] / (float)K; // sude
+    f_blockData[n+1][threadIdx.x] = f_blockData[n+1][threadIdx.x] * (float)K; //liche
+    __syncthreads();
+}
+
+__device__ void computeFDwt53(float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1])
+{
+    /*** ROW-WISE ***/
+    //Predict 1
+    //float a = -1.586134342;
+    int n = threadIdx.y*2 + 1; //odd samples
+    rowPredict((float)P53, n, f_blockData);
+    __syncthreads();
+
+    // Update 1
+    //a = -0.05298011854;
+    n--; //even samples
+    rowUpdate((float)U53, n, f_blockData); 
+    __syncthreads();
+
+    /*** COL-WISE ***/
+    //Predict 1
+    //float a = -1.586134342;
+    n = threadIdx.y*2 + 1; //odd samples
+    colPredict((float)P53, n, f_blockData);
+    __syncthreads();
+
+    // Update 1
+    //a = -0.05298011854;
+    n--; //even samples
+    colUpdate((float)U53, n, f_blockData); 
+    __syncthreads();
+}
+
+
+template<typename T>
+__global__ void fdwt97(T *src, T *out, int width, int height, enum dwtfilter filter)
+{
 
     const int   globalTileX = IMUL(blockIdx.x, DWT_BLOCK_SIZE_X);
     const int   globalTileY = IMUL(blockIdx.y, DWT_BLOCK_SIZE_Y);   
@@ -142,67 +250,15 @@ __global__ void fdwt97(float *src, float *out, int width, int height)
 
     __syncthreads();
 
-    /*** ROW-WISE ***/
-    //Predict 1
-    //float a = -1.586134342;
-    int n = threadIdx.y*2 + 1; //odd samples
-    rowPredict97(A, n, f_blockData);
-    __syncthreads();
-
-    // Update 1
-    //a = -0.05298011854;
-    n--; //even samples
-    rowUpdate97(B, n, f_blockData); 
-    __syncthreads();
-
-    //Predict 2
-    //a = 0.8829110762;
-    n++; //odd samples
-    rowPredict97(C, n, f_blockData);
-    __syncthreads();
-
-    // Update 2
-    //a = 0.4435068522;
-    n--; //even samples
-    rowUpdate97(D, n, f_blockData); 
-    __syncthreads();
-
-    //scale 
-    //a = 1.149604398;
-    f_blockData[threadIdx.x][n] = f_blockData[threadIdx.x][n] / K; // sude
-    f_blockData[threadIdx.x][n+1] = f_blockData[threadIdx.x][n+1] * K; //liche
-    __syncthreads();
-
-    /*** COL-WISE ***/
-    //Predict 1
-    //float a = -1.586134342;
-    n = threadIdx.y*2 + 1; //odd samples
-    colPredict97(A, n, f_blockData);
-    __syncthreads();
-
-    // Update 1
-    //a = -0.05298011854;
-    n--; //even samples
-    colUpdate97(B, n, f_blockData); 
-    __syncthreads();
-
-    //Predict 2
-    //a = 0.8829110762;
-    n++; //odd samples
-    colPredict97(C, n, f_blockData);
-    __syncthreads();
-
-    // Update 2
-    //a = 0.4435068522;
-    n--; //even samples
-    colUpdate97(D, n, f_blockData); 
-    __syncthreads();
-
-    //scale 
-    //a = 1.149604398;
-    f_blockData[n][threadIdx.x] = f_blockData[n][threadIdx.x] / K; // sude
-    f_blockData[n+1][threadIdx.x] = f_blockData[n+1][threadIdx.x] * K; //liche
-    __syncthreads();
+    /* Compute DWT */
+    switch (filter) {
+        case dwt97:
+            computeFDwt97(f_blockData);
+            break;
+        case dwt53:
+            computeFDwt53(f_blockData);
+            break;
+    }
 
     //store data
     globalThreadX = globalTileX + threadIdx.x;
@@ -318,7 +374,6 @@ __global__ void fdwt97(float *src, float *out, int width, int height)
 
 __global__ void rdwt97(float *src, float *out, int width, int height)
 {
-    __shared__ float f_blockData[2*DWT_BLOCK_SIZE_Y][DWT_BLOCK_SIZE_X + 1];
 
     const int   globalTileX = IMUL(blockIdx.x, DWT_BLOCK_SIZE_X);
     const int   globalTileY = IMUL(blockIdx.y, DWT_BLOCK_SIZE_Y);   
@@ -390,53 +445,53 @@ __global__ void rdwt97(float *src, float *out, int width, int height)
 
     /*** COL-WISE ***/
     //unscale 
-    f_blockData[n][threadIdx.x] = f_blockData[n][threadIdx.x] * K; // sude
-    f_blockData[n+1][threadIdx.x] = f_blockData[n+1][threadIdx.x] / K; //liche
+    f_blockData[n][threadIdx.x] = f_blockData[n][threadIdx.x] * (float)K; // sude
+    f_blockData[n+1][threadIdx.x] = f_blockData[n+1][threadIdx.x] / (float)K; //liche
     __syncthreads();
 
     // Undo Update 2
-    colUpdate97(-1*D, n, f_blockData); 
+    colUpdate(-1*(float)D, n, f_blockData); 
     __syncthreads();
 
     //Undo Predict 2
     n++; //odd samples
-    colPredict97(-1*C, n, f_blockData);
+    colPredict(-1*(float)C, n, f_blockData);
     __syncthreads();
 
     // Undo Update 1
     n--; //even samples
-    colUpdate97(-1*B, n, f_blockData); 
+    colUpdate(-1*(float)B, n, f_blockData); 
     __syncthreads();
 
     //Undo Predict 1
     n++; //odd samples
-    colPredict97(-1*A, n, f_blockData);
+    colPredict(-1*(float)A, n, f_blockData);
     __syncthreads();
 
     /*** ROW-WISE ***/
     //unscale 
     n--; //even samples
-    f_blockData[threadIdx.x][n] = f_blockData[threadIdx.x][n] * K; // sude
-    f_blockData[threadIdx.x][n+1] = f_blockData[threadIdx.x][n+1] / K; //liche
+    f_blockData[threadIdx.x][n] = f_blockData[threadIdx.x][n] * (float)K; // sude
+    f_blockData[threadIdx.x][n+1] = f_blockData[threadIdx.x][n+1] / (float)K; //liche
     __syncthreads();
 
     // Undo Update 2
-    rowUpdate97(-1*D, n, f_blockData); 
+    rowUpdate(-1*(float)D, n, f_blockData); 
     __syncthreads();
 
     // Undo Predict 2
     n++; //odd samples
-    rowPredict97(-1*C, n, f_blockData);
+    rowPredict(-1*(float)C, n, f_blockData);
     __syncthreads();
 
     // Undo Update 1
     n--; //even samples
-    rowUpdate97(-1*B, n, f_blockData); 
+    rowUpdate(-1*(float)B, n, f_blockData); 
     __syncthreads();
 
     // Undo Predict 1
     n++; //even samples
-    rowPredict97(-1*A, n, f_blockData);
+    rowPredict(-1*(float)A, n, f_blockData);
     __syncthreads();
 
     //store data
