@@ -28,7 +28,7 @@
 #define _DWT_H
 
 template<typename T> 
-int nStage2dFDWT97(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages);
+int nStage2dFDWT(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages);
 
 int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
 

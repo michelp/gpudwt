@@ -52,7 +52,7 @@ inline void fdwt(dim3 grid, dim3 threads, int *in, int *tempBuf, int width, int 
 }
 
 template<typename T>
-int nStage2dFDWT97(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages)
+int nStage2dFDWT(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages)
 {
     int i;
     int width  = 2 * pixWidth;
@@ -96,8 +96,8 @@ int nStage2dFDWT97(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages)
     
     return 0;
 }
-template int nStage2dFDWT97<float>(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
-template int nStage2dFDWT97<int>(int * in, int * tempBuf, int pixWidth, int pixHeight, int stages);
+template int nStage2dFDWT<float>(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
+template int nStage2dFDWT<int>(int * in, int * tempBuf, int pixWidth, int pixHeight, int stages);
 
 int nStage2dRDWT97(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages)
 {
