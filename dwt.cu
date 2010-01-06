@@ -37,7 +37,7 @@
 
 #include "dwt.h"
 #include "common.h"
-#include "dwt97_kernel.cu"
+#include "dwt_kernel.cu"
 
 inline void fdwt(dim3 grid, dim3 threads, float *in, float *tempBuf, int width, int height)
 {
