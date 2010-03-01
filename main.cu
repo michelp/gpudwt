@@ -77,13 +77,20 @@ void usage() {
   -f, --forward\t\t\tforward transform\n\
   -r, --reverse\t\t\treverse transform\n\
   -9, --97\t\t\t9/7 transform\n\
-  -5, --53\t\t\t5/3 transform\n");
+  -5, --53\t\t\t5/3 transform\n\
+  -w  --write-visual\t\twrite output in visual (tiled) fashion instead of the linear\n");
 }
 
 template <typename T>
-void processDWT(struct dwt *d, int forward)
+void processDWT(struct dwt *d, int forward, int writeVisual)
 {
     int componentSize = d->pixWidth*d->pixHeight*sizeof(T);
+    int (*dwt_func)(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages) = NULL;
+    if (forward) {
+        dwt_func = nStage2dFDWT;
+    } else {
+        dwt_func = nStage2dRDWT;
+    }
 
     T *c_tempbuf;
     cudaMalloc((void**)&c_tempbuf, componentSize); //< aligned component size
@@ -114,16 +121,22 @@ void processDWT(struct dwt *d, int forward)
         /* Forward DWT 9/7 */
 
         /* Compute DWT */
-        nStage2dFDWT(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        dwt_func(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT(c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        dwt_func(c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
-        nStage2dFDWT(c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        dwt_func(c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         cudaMemset(c_tempbuf, 0, componentSize);
         /* Store DWT to file */
-        writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
-        writeNStage2DDWT(c_g, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".g");
-        writeNStage2DDWT(c_b, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".b");
+        if (writeVisual) {
+            writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
+            writeNStage2DDWT(c_g, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".g");
+            writeNStage2DDWT(c_b, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".b");
+        } else {
+            writeLinear(c_r, d->pixWidth, d->pixHeight, d->outFilename, ".r");
+            writeLinear(c_g, d->pixWidth, d->pixHeight, d->outFilename, ".g");
+            writeLinear(c_b, d->pixWidth, d->pixHeight, d->outFilename, ".b");
+        }
 
         cudaFree(c_r);
         cudaCheckError("Cuda free");
@@ -143,9 +156,13 @@ void processDWT(struct dwt *d, int forward)
         bwToComponent(c_r, d->srcImg, d->pixWidth, d->pixHeight);
 
         /* Compute DWT */
-        nStage2dFDWT(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        dwt_func(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
         /* Store DWT to file */
-        writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
+        if (writeVisual) {
+            writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
+        } else {
+            writeLinear(c_r, d->pixWidth, d->pixHeight, d->outFilename, ".lin.out");
+        }
 
         cudaFree(c_r);
         cudaCheckError("Cuda free");
@@ -169,20 +186,22 @@ int main(int argc, char **argv)
         {"reverse",     no_argument,       0, 'r'}, //forward transform
         {"97",          no_argument,       0, '9'}, //9/7 transform
         {"53",          no_argument,       0, '5' }, //5/3transform
+        {"write-visual",no_argument,       0, 'w' }, //write output (subbands) in visual (tiled) order instead of linear
         {"help",        no_argument,       0, 'h'}  
     };
     
-    int pixWidth  = 0; //<real pixWidth
-    int pixHeight = 0; //<real pixHeight
-    int compCount = 3; //number of components; 3 for RGB or YUV, 4 for RGBA
-    int bitDepth  = 8; 
-    int dwtLvls   = 3; //default numuber of DWT levels
-    int device    = 0;
-    int forward   = 1; //forward transform
-    int dwt97     = 1; //1=dwt9/7, 0=dwt5/3 transform
+    int pixWidth    = 0; //<real pixWidth
+    int pixHeight   = 0; //<real pixHeight
+    int compCount   = 3; //number of components; 3 for RGB or YUV, 4 for RGBA
+    int bitDepth    = 8; 
+    int dwtLvls     = 3; //default numuber of DWT levels
+    int device      = 0;
+    int forward     = 1; //forward transform
+    int dwt97       = 1; //1=dwt9/7, 0=dwt5/3 transform
+    int writeVisual = 0; //write output (subbands) in visual (tiled) order instead of linear
     char * pos;
 
-    while ((ch = getopt_long(argc, argv, "d:c:b:l:D:fr95h", longopts, &optindex)) != -1) {
+    while ((ch = getopt_long(argc, argv, "d:c:b:l:D:fr95wh", longopts, &optindex)) != -1) {
         switch (ch) {
         case 'd':
             pixWidth = atoi(optarg);
@@ -217,6 +236,9 @@ int main(int argc, char **argv)
         case '5':
             dwt97 = 0;
             break;
+        case 'w':
+            writeVisual = 1;
+            break;
         case 'h':
             usage();
             return 0;
@@ -240,6 +262,10 @@ int main(int argc, char **argv)
         printf("Wrong or missing dimensions\n");
         usage();
         return -1;
+    }
+
+    if (forward == 0) {
+        writeVisual = 0; //do not write visual when RDWT
     }
 
     // device init
@@ -306,15 +332,15 @@ int main(int argc, char **argv)
     /* DWT */
     if (forward == 1) {
         if(dwt97 == 1 )
-            processDWT<float>(d, forward);
+            processDWT<float>(d, forward, writeVisual);
         else // 5/3
-            processDWT<int>(d, forward);
+            processDWT<int>(d, forward, writeVisual);
     }
     else { // reverse
         if(dwt97 == 1 )
-            processDWT<float>(d, forward);
+            processDWT<float>(d, forward, writeVisual);
         else // 5/3
-            processDWT<int>(d, forward);
+            processDWT<int>(d, forward, writeVisual);
     }
 
     //writeComponent(r_cuda, pixWidth, pixHeight, srcFilename, ".g");
