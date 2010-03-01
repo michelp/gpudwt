@@ -169,6 +169,8 @@ int nStage2dRDWT(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages)
 
     return 0;
 }
+template int nStage2dRDWT<float>(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
+template int nStage2dRDWT<int>(int * in, int * tempBuf, int pixWidth, int pixHeight, int stages);
 
 int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages)
 {
@@ -243,6 +245,52 @@ void samplesToChar(unsigned char * dst, int * src, int samplesNum)
     }
 }
 
+///* Write output linear orderd*/
+template<typename T>
+int writeLinear(T *component_cuda, int pixWidth, int pixHeight,
+                const char * filename, const char * suffix)
+{
+    unsigned char * result;
+    T *gpu_output;
+    int i;
+    int size;
+    int samplesNum = pixWidth*pixHeight;
+
+    size = samplesNum*sizeof(T);
+    cudaMallocHost((void **)&gpu_output, size);
+    cudaCheckError("Malloc host");
+    memset(gpu_output, 0, size);
+    result = (unsigned char *)malloc(samplesNum);
+    cudaMemcpy(gpu_output, component_cuda, size, cudaMemcpyDeviceToHost);
+    cudaCheckError("Memcopy device to host");
+
+    /* T to char */
+    samplesToChar(result, gpu_output, samplesNum);
+
+    /* Write component */
+    char outfile[strlen(filename)+strlen(suffix)];
+    strcpy(outfile, filename);
+    strcpy(outfile+strlen(filename), suffix);
+    i = open(outfile, O_CREAT|O_WRONLY, 0644);
+    if (i == -1) {
+        error(0,errno,"cannot access %s", outfile);
+        return -1;
+    }
+    printf("\nWriting to %s (%d x %d)\n", outfile, pixWidth, pixHeight);
+    write(i, result, samplesNum);
+    close(i);
+
+    /* Clean up */
+    cudaFreeHost(gpu_output);
+    cudaCheckError("Cuda free host memory");
+    free(result);
+
+    return 0;
+}
+template int writeLinear<float>(float *component_cuda, int pixWidth, int pixHeight, const char * filename, const char * suffix); 
+template int writeLinear<int>(int *component_cuda, int pixWidth, int pixHeight, const char * filename, const char * suffix); 
+
+/* Write output visual ordered */
 template<typename T>
 int writeNStage2DDWT(T *component_cuda, int pixWidth, int pixHeight, 
                      int stages, const char * filename, const char * suffix) 

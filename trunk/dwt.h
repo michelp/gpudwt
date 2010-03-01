@@ -40,5 +40,8 @@ int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int curSta
 template<typename T>
 int writeNStage2DDWT(T *component_cuda, int width, int height, 
                      int stages, const char * filename, const char * suffix);
+template<typename T>
+int writeLinear(T *component_cuda, int width, int height, 
+                     const char * filename, const char * suffix);
 
 #endif
