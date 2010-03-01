@@ -182,7 +182,7 @@ int main(int argc, char **argv)
     int dwt97     = 1; //1=dwt9/7, 0=dwt5/3 transform
     char * pos;
 
-    while ((ch = getopt_long(argc, argv, "d:c:b:l:D:h", longopts, &optindex)) != -1) {
+    while ((ch = getopt_long(argc, argv, "d:c:b:l:D:fr95h", longopts, &optindex)) != -1) {
         switch (ch) {
         case 'd':
             pixWidth = atoi(optarg);
