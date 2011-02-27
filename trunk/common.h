@@ -32,15 +32,15 @@
 //only within [-8M, 8M - 1] range
 #define IMUL(a, b) __mul24(a, b)
 
-//cuda timing macros
-#define CTIMERINIT  cudaEvent_t cstart, cstop; \
-                    cudaEventCreate(&cstart); \
-                    cudaEventCreate(&cstop); \
-                    float elapsedTime
-#define CTIMERSTART(cstart) cudaEventRecord(cstart,0)
-#define CTIMERSTOP(cstop) cudaEventRecord(cstop,0); \
-                          cudaEventSynchronize(cstop); \
-                          cudaEventElapsedTime(&elapsedTime, cstart, cstop)
+////cuda timing macros
+//#define CTIMERINIT  cudaEvent_t cstart, cstop; \
+//                    cudaEventCreate(&cstart); \
+//                    cudaEventCreate(&cstop); \
+//                    float elapsedTime
+//#define CTIMERSTART(cstart) cudaEventRecord(cstart,0)
+//#define CTIMERSTOP(cstop) cudaEventRecord(cstop,0); \
+//                          cudaEventSynchronize(cstop); \
+//                          cudaEventElapsedTime(&elapsedTime, cstart, cstop)
 
 //divide and round up macro
 #define DIVANDRND(a, b) ((((a) % (b)) != 0) ? ((a) / (b) + 1) : ((a) / (b)))

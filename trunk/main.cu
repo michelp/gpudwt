@@ -85,20 +85,31 @@ template <typename T>
 void processDWT(struct dwt *d, int forward, int writeVisual)
 {
     int componentSize = d->pixWidth*d->pixHeight*sizeof(T);
-    int (*dwt_func)(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages) = NULL;
-    if (forward) {
-        dwt_func = nStage2dFDWT;
-    } else {
-        dwt_func = nStage2dRDWT;
-    }
-
-    T *c_tempbuf;
-    cudaMalloc((void**)&c_tempbuf, componentSize); //< aligned component size
+    
+    T *c_r_out, *backup;
+    cudaMalloc((void**)&c_r_out, componentSize); //< aligned component size
     cudaCheckError("Alloc device memory");
-    cudaMemset(c_tempbuf, 0, componentSize);
+    cudaMemset(c_r_out, 0, componentSize);
+    cudaCheckError("Memset device memory");
+    
+    cudaMalloc((void**)&backup, componentSize); //< aligned component size
+    cudaCheckError("Alloc device memory");
+    cudaMemset(backup, 0, componentSize);
     cudaCheckError("Memset device memory");
 
     if (d->components == 3) {
+        /* Alloc two more buffers for G and B */
+        T *c_g_out, *c_b_out;
+        cudaMalloc((void**)&c_g_out, componentSize); //< aligned component size
+        cudaCheckError("Alloc device memory");
+        cudaMemset(c_g_out, 0, componentSize);
+        cudaCheckError("Memset device memory");
+        
+        cudaMalloc((void**)&c_b_out, componentSize); //< aligned component size
+        cudaCheckError("Alloc device memory");
+        cudaMemset(c_b_out, 0, componentSize);
+        cudaCheckError("Memset device memory");
+        
         /* Load components */
         T *c_r, *c_g, *c_b;
         cudaMalloc((void**)&c_r, componentSize); //< R, aligned component size
@@ -118,24 +129,19 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
 
         rgbToComponents(c_r, c_g, c_b, d->srcImg, d->pixWidth, d->pixHeight);
 
-        /* Forward DWT 9/7 */
-
-        /* Compute DWT */
-        dwt_func(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
-        cudaMemset(c_tempbuf, 0, componentSize);
-        dwt_func(c_g, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
-        cudaMemset(c_tempbuf, 0, componentSize);
-        dwt_func(c_b, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
-        cudaMemset(c_tempbuf, 0, componentSize);
+        /* Compute DWT and always store into file */
+        nStage2dDWT(c_r, c_r_out, backup, d->pixWidth, d->pixHeight, d->dwtLvls, forward);
+        nStage2dDWT(c_g, c_g_out, backup, d->pixWidth, d->pixHeight, d->dwtLvls, forward);
+        nStage2dDWT(c_b, c_b_out, backup, d->pixWidth, d->pixHeight, d->dwtLvls, forward);
         /* Store DWT to file */
         if (writeVisual) {
-            writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
-            writeNStage2DDWT(c_g, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".g");
-            writeNStage2DDWT(c_b, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".b");
+            writeNStage2DDWT(c_r_out, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".r");
+            writeNStage2DDWT(c_g_out, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".g");
+            writeNStage2DDWT(c_b_out, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".b");
         } else {
-            writeLinear(c_r, d->pixWidth, d->pixHeight, d->outFilename, ".r");
-            writeLinear(c_g, d->pixWidth, d->pixHeight, d->outFilename, ".g");
-            writeLinear(c_b, d->pixWidth, d->pixHeight, d->outFilename, ".b");
+            writeLinear(c_r_out, d->pixWidth, d->pixHeight, d->outFilename, ".r");
+            writeLinear(c_g_out, d->pixWidth, d->pixHeight, d->outFilename, ".g");
+            writeLinear(c_b_out, d->pixWidth, d->pixHeight, d->outFilename, ".b");
         }
 
         cudaFree(c_r);
@@ -143,6 +149,10 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
         cudaFree(c_g);
         cudaCheckError("Cuda free");
         cudaFree(c_b);
+        cudaCheckError("Cuda free");
+        cudaFree(c_g_out);
+        cudaCheckError("Cuda free");
+        cudaFree(c_b_out);
         cudaCheckError("Cuda free");
 
     } else if (d->components == 1) {
@@ -156,19 +166,21 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
         bwToComponent(c_r, d->srcImg, d->pixWidth, d->pixHeight);
 
         /* Compute DWT */
-        dwt_func(c_r, c_tempbuf, d->pixWidth, d->pixHeight, d->dwtLvls);
+        nStage2dDWT(c_r, c_r_out, backup, d->pixWidth, d->pixHeight, d->dwtLvls, forward);
         /* Store DWT to file */
         if (writeVisual) {
-            writeNStage2DDWT(c_r, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
+            writeNStage2DDWT(c_r_out, d->pixWidth, d->pixHeight, d->dwtLvls, d->outFilename, ".out");
         } else {
-            writeLinear(c_r, d->pixWidth, d->pixHeight, d->outFilename, ".lin.out");
+            writeLinear(c_r_out, d->pixWidth, d->pixHeight, d->outFilename, ".lin.out");
         }
 
         cudaFree(c_r);
         cudaCheckError("Cuda free");
     }
 
-    cudaFree(c_tempbuf);
+    cudaFree(c_r_out);
+    cudaCheckError("Cuda free device");
+    cudaFree(backup);
     cudaCheckError("Cuda free device");
 }
 

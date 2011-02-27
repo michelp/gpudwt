@@ -28,14 +28,7 @@
 #define _DWT_H
 
 template<typename T> 
-int nStage2dFDWT(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages);
-
-template<typename T> 
-int nStage2dRDWT(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages);
-
-int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages);
-int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages);
-
+int nStage2dDWT(T *in, T *out, T * backup, int pixWidth, int pixHeight, int stages, bool forward);
 
 template<typename T>
 int writeNStage2DDWT(T *component_cuda, int width, int height, 

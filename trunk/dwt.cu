@@ -31,195 +31,70 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <error.h>
-
-#define DWT_BLOCK_SIZE_X 32
-#define DWT_BLOCK_SIZE_Y 16
-
+#include "dwt_cuda/dwt.h"
+#include "dwt_cuda/common.h"
 #include "dwt.h"
 #include "common.h"
-#include "dwt_kernel.cu"
 
-inline void fdwt(dim3 grid, dim3 threads, float *in, float *tempBuf, int width, int height)
+inline void fdwt(float *in, float *out, int width, int height, int levels)
 {
-        fdwt<float><<<grid, threads>>>(in, tempBuf, width, height, dwt97);
-        cudaCheckAsyncError("Forward DWT 9/7 kernel");
+        dwt_cuda::fdwt97(in, out, width, height, levels);
 }
 
-inline void fdwt(dim3 grid, dim3 threads, int *in, int *tempBuf, int width, int height)
+inline void fdwt(int *in, int *out, int width, int height, int levels)
 {
-        fdwt<int><<<grid, threads>>>(in, tempBuf, width, height, dwt53);
-        cudaCheckAsyncError("Forward DWT 5/3 kernel");
+        dwt_cuda::fdwt53(in, out, width, height, levels);
+}
+
+inline void rdwt(float *in, float *out, int width, int height, int levels)
+{
+        dwt_cuda::rdwt97(in, out, width, height, levels);
+}
+
+inline void rdwt(int *in, int *out, int width, int height, int levels)
+{
+        dwt_cuda::rdwt53(in, out, width, height, levels);
 }
 
 template<typename T>
-int nStage2dFDWT(T * in, T * tempBuf, int pixWidth, int pixHeight, int stages)
+int nStage2dDWT(T * in, T * out, T * backup, int pixWidth, int pixHeight, int stages, bool forward)
 {
-    int i;
-    int width  = 2 * pixWidth;
-    int height = 2 * pixHeight;
-    dim3 threads(DWT_BLOCK_SIZE_X, DWT_BLOCK_SIZE_Y);
-    dim3 grid;
-    struct timeval tv_start;
-    struct timeval tv_end;
-    float duration;
-
-    CTIMERINIT;
-
     printf("*** %d stages of 2D forward DWT:\n", stages);
-    gettimeofday(&tv_start, NULL);
-    for (i = 0; i < stages; i++) {
-        width       = DIVANDRND(width, 2);
-        height      = DIVANDRND(height, 2);
-        grid.x      = DIVANDRND(width,DWT_BLOCK_SIZE_X);
-        grid.y      = DIVANDRND(height,(DWT_BLOCK_SIZE_Y<<1)); // there is 2x more samples than threads on Y axis
-
-        printf("  * Forward 2D DWT, Stage %d:\n", i);
-        printf("    Img dim: \t\t%d x %d\n", width, height);
-        printf("    Block dim (x,y): \t%d x %d\n    Grid dim(x,y): \t%d x %d\n", threads.x, threads.y, grid.x, grid.y);
-
-        CTIMERSTART(cstart);
-        fdwt(grid, threads, in, tempBuf, width, height);
-        CTIMERSTOP(cstop);
-
-        printf("    fdwt972d kernel: \t%f ms\n", elapsedTime);
-
-        CTIMERSTART(cstart);
-        cudaMemcpy(in, tempBuf, width*height*sizeof(T), cudaMemcpyDeviceToDevice);
-        cudaCheckError("Memcopy device to device");
-        CTIMERSTOP(cstop);
-        printf("    memcpy *tempBuf to *in: \t%f ms, BW: \t%f GB/s\n", elapsedTime,
-        ((float)(width*height*sizeof(T)/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
-    }
-    gettimeofday(&tv_end, NULL);
-    duration = tv_end.tv_usec - tv_start.tv_usec;
-    printf("> Overal duration of %d stages: %f ms\n", stages, duration/1000.0f);
     
-    return 0;
-}
-template int nStage2dFDWT<float>(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
-template int nStage2dFDWT<int>(int * in, int * tempBuf, int pixWidth, int pixHeight, int stages);
-
-inline void rdwt(dim3 grid, dim3 threads, float *in, float *tempBuf, int width, int height)
-{
-        rdwt<float><<<grid, threads>>>(in, tempBuf, width, height, dwt97);
-        cudaCheckAsyncError("Forward DWT 9/7 kernel");
-}
-
-inline void rdwt(dim3 grid, dim3 threads, int *in, int *tempBuf, int width, int height)
-{
-        rdwt<int><<<grid, threads>>>(in, tempBuf, width, height, dwt53);
-        cudaCheckAsyncError("Forward DWT 5/3 kernel");
-}
-
-template<typename T>
-int nStage2dRDWT(T *in, T *tempBuf, int pixWidth, int pixHeight, int stages)
-{
-    struct stageDim {
-        int x;
-        int y;
-    };
-
-    struct stageDim *sd;
-    int i;
-    int width;
-    int height;
-    dim3 threads(DWT_BLOCK_SIZE_X, DWT_BLOCK_SIZE_Y);
-    dim3 grid;
-
-    CTIMERINIT;
-
-    sd = (struct stageDim *)malloc(stages * sizeof(struct stageDim));
-
-    sd[0].x = pixWidth;
-    sd[0].y = pixHeight;
-
-    // compute stage dimensions
-    for (i = 1; i < stages; i++) {
-        sd[i].x = DIVANDRND(sd[i-1].x, 2);
-        sd[i].y = DIVANDRND(sd[i-1].y, 2);
-    }
-
-    printf("*** %d stages of 2D reverse DWT:\n", stages);
-    for (i = stages-1; i >=0; i--) {
-        width       = sd[i].x;
-        height      = sd[i].y;
-        grid.x      = DIVANDRND(width,DWT_BLOCK_SIZE_X);
-        grid.y      = DIVANDRND(height,(DWT_BLOCK_SIZE_Y<<1)); // there is 2x more samples than threads on Y axis
-
-        printf("  * Reverse 2D DWT, Stage %d:\n", i);
-        printf("    Img dim: \t\t%d x %d\n", width, height);
-        printf("    Block dim (x,y): \t%d x %d\n    Grid dim(x,y): \t%d x %d\n", threads.x, threads.y, grid.x, grid.y);
-
-        CTIMERSTART(cstart);
-        rdwt(grid, threads, in, tempBuf, width, height);
-        cudaCheckAsyncError("Reverse DWT kernel");
-        CTIMERSTOP(cstop);
-
-        printf("    rdwt972d kernel: \t%f ms\n", elapsedTime);
-
-        CTIMERSTART(cstart);
-        cudaMemcpy(in, tempBuf, width*height*sizeof(float), cudaMemcpyDeviceToDevice);
+    /* create backup of input, because each test iteration overwrites it */
+    const int size = pixHeight * pixWidth * sizeof(T);
+    cudaMemcpy(backup, in, size, cudaMemcpyDeviceToDevice);
+    cudaCheckError("Memcopy device to device");
+    
+    /* Measure time of individual levels. */
+    if(forward)
+        fdwt(in, out, pixWidth, pixHeight, stages);
+    else
+        rdwt(in, out, pixWidth, pixHeight, stages);
+    
+    /* Measure overall time of DWT. */
+    #ifdef GPU_DWT_TESTING
+    dwt_cuda::CudaDWTTester tester;
+    for(int i = tester.getNumIterations(); i--; ) {
+        /* Recover input and measure one overall DWT run. */
+        cudaMemcpy(in, backup, size, cudaMemcpyDeviceToDevice); 
         cudaCheckError("Memcopy device to device");
-        CTIMERSTOP(cstop);
-
-        printf("    memcpy *tempBuf to *in: \t%f ms, BW: \t%f GB/s\n", elapsedTime,
-        ((float)(width*height*sizeof(T)/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
+        tester.beginTestIteration();
+        if(forward)
+            fdwt(in, out, pixWidth, pixHeight, stages);
+        else
+            rdwt(in, out, pixWidth, pixHeight, stages);
+        tester.endTestIteration();
     }
-    free(sd);
-
+    tester.showPerformance("   Overall DWT", pixWidth, pixHeight);
+    #endif  /* GPU_DWT_TESTING */
+    
+    cudaCheckAsyncError("DWT Kernel calls");
     return 0;
 }
-template int nStage2dRDWT<float>(float * in, float * tempBuf, int pixWidth, int pixHeight, int stages);
-template int nStage2dRDWT<int>(int * in, int * tempBuf, int pixWidth, int pixHeight, int stages);
+template int nStage2dDWT<float>(float*, float*, float*, int, int, int, bool);
+template int nStage2dDWT<int>(int*, int*, int*, int, int, int, bool);
 
-int forwardDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages)
-{
-    //timing 
-    CTIMERINIT;
-
-    int samplesNum = pixWidth*pixHeight;
-    float inputSize = samplesNum*sizeof(float);
-
-    // Kernell 1D DWT
-    dim3 threads(DWT_BLOCK_SIZE_X, DWT_BLOCK_SIZE_Y);
-    dim3 grid(DIVANDRND(pixWidth,DWT_BLOCK_SIZE_X), DIVANDRND(pixHeight,(2*DWT_BLOCK_SIZE_Y)));
-    printf("Block dim: %d x %d\n Grid dim: %d x %d\n", threads.x, threads.y, grid.x, grid.y);
-
-    CTIMERSTART(cstart);
-    fdwt<float><<<grid, threads>>>(in, out, pixWidth, pixHeight, dwt97);
-    cudaCheckAsyncError("Forward DWT 9/7 kernel");
-    CTIMERSTOP(cstop);
-
-
-    printf("cuda fdwt972d kernel %f ms\n", elapsedTime);
-    printf("cuda device to device %f ms - %f GB/s\n", elapsedTime,
-           ((float)(inputSize/1024.0f/1024.0f/1024.0f))/((float)(elapsedTime/1000)));
-
-    return 0;
-}
-
-int reverseDWT97(float * in, float *out, int pixWidth, int pixHeight, int curStage, int stages)
-{
-    //timing 
-    CTIMERINIT;
-
-    int samplesNum = pixWidth*pixHeight;
-
-    // Kernell
-    dim3 threads(DWT_BLOCK_SIZE_X, DWT_BLOCK_SIZE_Y);
-    dim3 grid(DIVANDRND(pixWidth,DWT_BLOCK_SIZE_X), DIVANDRND(pixHeight,(2*DWT_BLOCK_SIZE_Y)));
-    printf("Block dim: %d x %d\n Grid dim: %d x %d\n", threads.x, threads.y, grid.x, grid.y);
-    assert(samplesNum % 2 == 0);
-
-    CTIMERSTART(cstart);
-    rdwt<float><<<grid, threads>>>(in, out,pixWidth, pixHeight, dwt97);
-    cudaCheckAsyncError("Reverse DWT 9/7 kernel");
-    CTIMERSTOP(cstop);
-
-    printf("cuda rdwt97 kernel %f ms\n", elapsedTime);
-
-    return 0;
-}
 
 void samplesToChar(unsigned char * dst, float * src, int samplesNum)
 {

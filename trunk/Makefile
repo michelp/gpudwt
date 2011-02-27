@@ -5,14 +5,15 @@ EXECUTABLE := dwt
 # Debug options
 dbg=0
 cudagdb=0 #compile for use with cuda-gdb, note that 'dbg' must be 1 as well
+performancetest=1
 
 # NVCC Options
-NVCCFLAGS += -arch sm_13
+NVCCFLAGS += -arch sm_11
 
 # Files
 CFILES := 
 CXXFILES := 
-CUFILES := main.cu dwt.cu components.cu 
+CUFILES := main.cu dwt.cu components.cu dwt_cuda/fdwt53.cu dwt_cuda/fdwt97.cu dwt_cuda/common.cu dwt_cuda/rdwt97.cu dwt_cuda/rdwt53.cu
 
 # Includes
 INCLUDES := -I. -I$(CUDA_INSTALL_PATH)/include
@@ -67,6 +68,10 @@ else
     CFLAGS      += -fno-strict-aliasing
 endif
 
+ifeq ($(performancetest),1)
+    COMMONFLAGS += -DGPU_DWT_TESTING
+endif
+
 # Compilers
 CXX := g++
 CC := gcc
@@ -93,5 +98,5 @@ $(EXECUTABLE): $(COBJS) $(CXXOBJS) $(CUOBJS)
 	$(LINK) -o $(EXECUTABLE) $(COBJS) $(CXXOBJS) $(CUOBJS) $(LDFLAGS)
 
 clean:
-	rm -f *.o $(EXECUTABLE)
+	rm -f $(COBJS) $(CXXOBJS) $(CUOBJS) $(EXECUTABLE)
 
