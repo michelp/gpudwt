@@ -4,6 +4,32 @@
 /// @author  Martin Jirman (207962@mail.muni.cz)
 /// @date    2011-01-20 22:38
 /// 
+///
+/// Copyright (c) 2011 Martin Jirman
+/// All rights reserved.
+/// 
+/// Redistribution and use in source and binary forms, with or without
+/// modification, are permitted provided that the following conditions are met:
+/// 
+///     * Redistributions of source code must retain the above copyright
+///       notice, this list of conditions and the following disclaimer.
+///     * Redistributions in binary form must reproduce the above copyright
+///       notice, this list of conditions and the following disclaimer in the
+///       documentation and/or other materials provided with the distribution.
+/// 
+/// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+/// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+/// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+/// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+/// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+/// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+/// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+/// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+/// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+/// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+/// POSSIBILITY OF SUCH DAMAGE.
+///
+
 
 #ifndef IO_H
 #define	IO_H
@@ -14,7 +40,6 @@
 namespace dwt_cuda {
 
   
-  
   /// Base for all IO classes - manages mirroring.
   class DWTIO {
   protected:
@@ -22,11 +47,34 @@ namespace dwt_cuda {
     /// @param d      a position in the image (will be replaced by mirrored d)
     /// @param sizeD  size of the image along the dimension of 'd'
     __device__ static void mirror(int & d, const int & sizeD) {
-      if(d < 0) {
-        d = -d;
-      }
+      // TODO: enable multiple mirroring:
+//      if(sizeD > 1) {
+//        if(d < 0) {
+//          const int underflow = -1 - d;
+//          const int phase = (underflow / (sizeD - 1)) & 1;
+//          const int remainder = underflow % (sizeD - 1);
+//          if(phase == 0) {
+//            d = remainder + 1;
+//          } else {
+//            d = sizeD - 2 - remainder;
+//          }
+//        } else if(d >= sizeD) {
+//          const int overflow = d - sizeD;
+//          const int phase = (overflow / (sizeD - 1)) & 1;
+//          const int remainder = overflow % (sizeD - 1);
+//          if(phase == 0) {
+//            d = sizeD - 2 - remainder;
+//          } else {
+//            d = remainder + 1;
+//          }
+//        }
+//      } else {
+//        d = 0;
+//      }
       if(d >= sizeD) {
-        d = 2 * (sizeD - 1) - d;
+        d = 2 * sizeD - 2 - d;
+      } else if(d < 0) {
+        d = -d;
       }
     }
   };
@@ -138,6 +186,8 @@ namespace dwt_cuda {
         last -= 2 * this->stride;
         this->stride = -this->stride; // reverse loader's direction
       }
+      // avoid reading from negative indices if loader is checked
+      // return (CHECKED && (last < 0)) ? 0 : input[last];  // TODO: use this checked variant later
       return input[last];
     }
   };
@@ -236,6 +286,8 @@ namespace dwt_cuda {
         this->strideLowToHigh = -this->strideHighToLow;
         this->strideHighToLow = -temp;
       }
+      // avoid reading from negative indices if loader is checked
+      // return (CHECKED && (last < 0)) ? 0 : input[last];  // TODO: use this checked variant later
       return input[last];
     }
   public:
@@ -356,7 +408,6 @@ namespace dwt_cuda {
     }
 
   };
-  
   
   
   
